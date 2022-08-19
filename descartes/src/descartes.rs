@@ -111,10 +111,7 @@ impl From<&DriveParsed> for Drive {
                         .take_while(|&n| *n != 0)
                         .map(|&n| n)
                         .collect();
-                        Ok(match String::from_utf8(removed_trailing_zeros) {
-                            Ok(valid) => valid,
-                            Err(_) => {String::from("")}
-                        })
+                        Ok(String::from_utf8(removed_trailing_zeros).unwrap())
                 })
                 .unwrap(),
             root_hash: parsed.4,
