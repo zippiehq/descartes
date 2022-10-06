@@ -61,6 +61,11 @@ const config: HardhatUserConfig = {
             chainId: 0xa869,
             accounts: mnemonic ? { mnemonic } : undefined,
         },
+        arbitrum_goerli: {
+            url: "https://goerli-rollup.arbitrum.io/rpc",
+            chainId: 421613,
+            accounts: mnemonic ? { mnemonic } : undefined,
+        },
         arbitrum_rinkeby: {
             url: "https://rinkeby.arbitrum.io/rpc",
             chainId: 421611,
@@ -102,8 +107,7 @@ const config: HardhatUserConfig = {
                 deploy: "node_modules/@cartesi/logger/dist/deploy",
             },
             {
-                deploy:
-                    "node_modules/@cartesi/machine-solidity-step/dist/deploy",
+                deploy: "node_modules/@cartesi/machine-solidity-step/dist/deploy",
                 artifacts:
                     "node_modules/@cartesi/machine-solidity-step/export/artifacts",
             },
