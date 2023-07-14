@@ -3,7 +3,7 @@
 # general definitions
 FLASHDRIVE_BASE_DIR=.
 FLASHDRIVE_PATH=dapp_data_0/flashdrive
-CARTESI_IPFS_DOCKER=cartesi/ipfs-server:0.2.0
+CARTESI_IPFS_DOCKER=cartesi/ipfs-server:0.3.0
 
 
 # set flashdrive base directory to specified path if provided
@@ -16,7 +16,8 @@ if [ $2 ]; then
   FLASHDRIVE_PATH=$2
 fi
 
-echo -e -n "#!/usr/bin/lua\nprint(math.sin(1))" > input_drive
+RANDOM=$(date +%s%N)
+echo -e -n "#!/usr/bin/lua\nprint(math.sin($RANDOM))" > input_drive
 
 size=$(echo "2^$DRIVE_LOG2_SIZE" | bc)
 truncate -s $size input_drive

@@ -1,13 +1,13 @@
-FROM node:14-alpine
+FROM node:14-alpine3.14
 
 # install dockerize, as we need to wait on ganache to be responding
 RUN apk add --no-cache \
     build-base \
     git \
     openssl \
-    python \
+    python3 \
 #     python-dev \
-    py-pip
+    py3-pip
 
 # ENV DOCKERIZE_VERSION v0.6.1
 # RUN wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-alpine-linux-amd64-$DOCKERIZE_VERSION.tar.gz \
@@ -16,15 +16,15 @@ RUN apk add --no-cache \
 
 ENV BASE /opt/cartesi
 
-WORKDIR $BASE/deployer
+WORKDIR $BASE/share/blockchain
 COPY yarn.lock .
 COPY package.json .
 COPY hardhat.config.ts .
 COPY tsconfig.json .
-COPY contracts .
-COPY deploy .
+COPY contracts contracts
+COPY deploy deploy
 
-RUN yarn 
+RUN yarn install --production=false
 
 ENV ETHEREUM_HOST "hardhatnet"
 ENV ETHEREUM_PORT "8545"
@@ -34,6 +34,4 @@ ENV DOCKER true
 
 EXPOSE 8545  
 
-WORKDIR $BASE/share/blockchain
-
-CMD ["npx", "hardhat",  "node" ]
+CMD ["yarn", "hardhat",  "node" ]

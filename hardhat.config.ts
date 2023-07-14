@@ -7,6 +7,8 @@ import "hardhat-deploy";
 import "hardhat-deploy-ethers";
 
 import "@nomiclabs/hardhat-solpp";
+
+import "hardhat-contract-sizer";
 // import "solidity-coverage"; @dev WIP this plugin is not updated to hardhat yet
 
 // This is a sample hardhat task. To learn how to create your own go to
@@ -36,7 +38,10 @@ const infuraNetwork = (
 
 const config: HardhatUserConfig = {
     networks: {
-        hardhat: mnemonic ? { accounts: { mnemonic } } : {},
+        hardhat: {
+            accounts: mnemonic ? { mnemonic } : undefined,
+            allowUnlimitedContractSize: true,
+        },
         localhost: {
             url: "http://localhost:8545",
             accounts: mnemonic ? { mnemonic } : undefined,
@@ -47,8 +52,11 @@ const config: HardhatUserConfig = {
             gas: 0xfffffffffff, // <-- Use this high gas value
             gasPrice: 0x01, // <-- Use this low gas price
         },
-        rinkeby: infuraNetwork("rinkeby", 4, 6283185),
-        kovan: infuraNetwork("kovan", 42, 6283185),
+        mainnet: infuraNetwork("mainnet", 1, 6283185),
+        arbitrum_one: {
+            url: process.env.RPC_URL || "https://arb1.arbitrum.io/rpc",
+            accounts: mnemonic ? { mnemonic } : undefined,
+        },
         goerli: infuraNetwork("goerli", 5, 6283185),
         matic_testnet: infuraNetwork("polygon-mumbai", 80001),
         bsc_testnet: {
@@ -63,13 +71,24 @@ const config: HardhatUserConfig = {
         },
     },
     solidity: {
-        version: "0.7.4",
-        settings: {
-            optimizer: {
-                runs: 110,
-                enabled: true,
+        compilers: [
+            {
+                version: "0.7.4",
+                settings: {
+                    optimizer: {
+                        enabled: true,
+                    },
+                },
             },
-        },
+            {
+                version: "0.8.15",
+                settings: {
+                    optimizer: {
+                        enabled: true,
+                    },
+                },
+            },
+        ],
     },
     paths: {
         artifacts: "artifacts",
@@ -98,18 +117,6 @@ const config: HardhatUserConfig = {
             },
         ],
         deployments: {
-            rinkeby: [
-                "node_modules/@cartesi/util/deployments/rinkeby",
-                "node_modules/@cartesi/arbitration/deployments/rinkeby",
-                "node_modules/@cartesi/logger/deployments/rinkeby",
-                "node_modules/@cartesi/machine-solidity-step/deployments/rinkeby",
-            ],
-            kovan: [
-                "node_modules/@cartesi/util/deployments/kovan",
-                "node_modules/@cartesi/arbitration/deployments/kovan",
-                "node_modules/@cartesi/logger/deployments/kovan",
-                "node_modules/@cartesi/machine-solidity-step/deployments/kovan",
-            ],
             goerli: [
                 "node_modules/@cartesi/util/deployments/goerli",
                 "node_modules/@cartesi/arbitration/deployments/goerli",

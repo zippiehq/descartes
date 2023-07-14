@@ -21,8 +21,8 @@ async function main() {
     const { ethers, getNamedAccounts } = hre;
     const { alice, bob } = await getNamedAccounts();
 
-    // retrieves Descartes and Logger deployed contracts
-    const descartes = await ethers.getContract("Descartes");
+    // retrieves Cartesi Compute and Logger deployed contracts
+    const cartesi_compute = await ethers.getContract("CartesiCompute");
     const logger = await ethers.getContract("Logger");
 
     let data = "2^71 + 36^12";
@@ -37,7 +37,7 @@ async function main() {
     // submits data to the logger
     const dataUint8Array = ethers.utils.toUtf8Bytes(data);
     // TEMP: always using "2^71 + 36^12" in hex form for testing
-    const txLogger = await logger.calculateMerkleRootFromData(5, [
+    const txLogger = await logger.calculateMerkleRootFromData(12, [
         "0x325E3731202B2033",
         "0x365E313200000000",
     ]);
@@ -58,8 +58,8 @@ async function main() {
         provider = alice;
     }
     const input = {
-        position: "0x9000000000000000",
-        driveLog2Size: 5,
+        position: "0x90000000000000",
+        driveLog2Size: 12,
         directValue: ethers.utils.formatBytes32String(""),
         loggerIpfsPath: ethers.utils.formatBytes32String(""),
         loggerRootHash: logRoot,
@@ -68,25 +68,26 @@ async function main() {
         provider: provider,
     };
 
-    // instantiates descartes computation
-    const tx = await descartes.instantiate(
+    // instantiates cartesi_compute computation
+    const tx = await cartesi_compute.instantiate(
         // final time
         config.finalTime,
         // template hash
-        "0xa278371ed8d52efa6aba9f825ba8130d2604b363b3ceb51c1bd3a210f400fd8a",
+        "0xa3b304cd520dc7ffb3ae9f7f46200b1a2c474235c12209c05753a7e5170c3449",
         // output position
-        "0xa000000000000000",
+        "0xa0000000000000",
         // output log2 size
         10,
         // round duration
         config.roundDuration,
         [alice, bob],
-        [input]
+        [input],
+        false
     );
 
     // retrieves created computation's index
     const index = await new Promise((resolve) => {
-        descartes.on("DescartesCreated", (index) => resolve(index));
+        cartesi_compute.on("CartesiComputeCreated", (index) => resolve(index));
     });
 
     console.log(

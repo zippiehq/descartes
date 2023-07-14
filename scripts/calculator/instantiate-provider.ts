@@ -26,8 +26,8 @@ async function main() {
     }
     const peers = [alice, bob, charlie, dave].slice(0, num_peers);
 
-    // retrieves Descartes deployed contract
-    const descartes = await ethers.getContract("Descartes");
+    // retrieves Cartesi Compute deployed contract
+    const cartesi_compute = await ethers.getContract("CartesiCompute");
 
     let data = "2^71 + 36^12";
     if (process.env.data) {
@@ -40,8 +40,8 @@ async function main() {
 
     // defines input drive
     const input = {
-        position: "0x9000000000000000",
-        driveLog2Size: 5,
+        position: "0x90000000000000",
+        driveLog2Size: 12,
         directValue: ethers.utils.formatBytes32String(""),
         loggerIpfsPath: ethers.utils.formatBytes32String(""),
         loggerRootHash: ethers.utils.formatBytes32String(""),
@@ -50,25 +50,26 @@ async function main() {
         provider: alice,
     };
 
-    // instantiates descartes computation
-    const tx = await descartes.instantiate(
+    // instantiates cartesi_compute computation
+    const tx = await cartesi_compute.instantiate(
         // final time
         config.finalTime,
         // template hash
-        "0xa278371ed8d52efa6aba9f825ba8130d2604b363b3ceb51c1bd3a210f400fd8a",
+        "0xa3b304cd520dc7ffb3ae9f7f46200b1a2c474235c12209c05753a7e5170c3449",
         // output position
-        "0xa000000000000000",
+        "0xa0000000000000",
         // output log2 size
         10,
         // round duration
         config.roundDuration,
         peers,
-        [input]
+        [input],
+        false
     );
 
     // retrieves created computation's index
     const index = await new Promise((resolve) => {
-        descartes.on("DescartesCreated", (index) => resolve(index));
+        cartesi_compute.on("CartesiComputeCreated", (index) => resolve(index));
     });
 
     console.log(
@@ -76,13 +77,15 @@ async function main() {
     );
 
     // sends provider drive's data
-    const txDrive = await descartes.provideDirectDrive(
+    const drivePromise = new Promise((resolve) => {
+        cartesi_compute.on("DriveInserted", (index, drive) => resolve(drive));
+    });
+    const txDrive = await cartesi_compute.provideDirectDrive(
         index,
         ethers.utils.toUtf8Bytes(data)
     );
-    const drive = await new Promise((resolve) => {
-        descartes.on("DriveInserted", (index, drive) => resolve(drive));
-    });
+    console.log("Inserted drive");
+    const drive = await drivePromise;
     console.log(
         `Inserted provider drive '${JSON.stringify(drive)}' (tx: ${
             txDrive.hash

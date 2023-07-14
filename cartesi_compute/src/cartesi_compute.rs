@@ -24,7 +24,7 @@
 use super::compute::vg::{VGCtx, VGCtxParsed, VG};
 use super::configuration::Concern;
 use super::dispatcher::DApp;
-use super::dispatcher::{AddressArray, Bytes32Array, BytesField, U256Array};
+use super::dispatcher::{AddressArray, Bytes32Array, BytesField, U256Array, BoolField};
 use super::dispatcher::{Archive, Reaction};
 use super::error::*;
 use super::ethabi::Token;
@@ -37,13 +37,16 @@ use super::{
     build_machine_id, get_logger_response, Role,
 };
 use compute::{
-    build_session_proof_key, build_session_read_key, build_session_run_key,
-    build_session_write_key, cartesi_machine, get_run_result,
-    NewSessionRequest, NewSessionResponse, SessionGetProofRequest,
-    SessionGetProofResponse, SessionReadMemoryRequest,
+    build_session_end_key, build_session_proof_key, build_session_read_key,
+    build_session_run_key, build_session_write_key, build_session_replace_key,
+    cartesi_machine,
+    get_run_result, EndSessionRequest, NewSessionRequest, NewSessionResponse,
+    SessionGetProofRequest, SessionGetProofResponse, SessionReadMemoryRequest,
     SessionReadMemoryResponse, SessionRunRequest, SessionRunResult,
-    SessionWriteMemoryRequest, EMULATOR_METHOD_NEW, EMULATOR_METHOD_PROOF,
-    EMULATOR_METHOD_READ, EMULATOR_METHOD_WRITE, EMULATOR_SERVICE_NAME,
+    SessionWriteMemoryRequest, SessionReplaceMemoryRangeRequest, EMULATOR_METHOD_END, EMULATOR_METHOD_NEW,
+    EMULATOR_METHOD_PROOF, EMULATOR_METHOD_READ, EMULATOR_METHOD_WRITE,
+    EMULATOR_METHOD_REPLACE,
+    EMULATOR_SERVICE_NAME,
 };
 use ipfs_service::{
     GetFileRequest, GetFileResponse, GetFileResponseOneOf, IPFS_METHOD_GET,
@@ -56,11 +59,11 @@ use logger_service::{
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub struct Descartes();
+pub struct CartesiCompute();
 
 #[derive(Serialize, Deserialize)]
 pub enum TupleType {
-    #[serde(rename = "(uint64,uint8,bytes,bytes,bytes32,address,bool,bool)[]")]
+    #[serde(rename = "(uint64,uint8,bytes,bytes,bytes32,address,bool,bool,bool)[]")]
     DriveArrayTuple,
     #[serde(rename = "(bool,bool,bool,uint64)")]
     PartyTypeTuple,
@@ -76,6 +79,7 @@ pub struct DriveParsed(
     Address, // provider
     bool,    // needsProvider
     bool,    // needsLogger
+    bool,    // downloadAsCAR
 );
 
 #[derive(Serialize, Deserialize)]
@@ -96,6 +100,7 @@ pub struct Drive {
     provider: Address,
     waits_provider: bool,
     needs_logger: bool,
+    download_as_car: bool,
 }
 
 impl From<&DriveParsed> for Drive {
@@ -118,6 +123,7 @@ impl From<&DriveParsed> for Drive {
             provider: parsed.5,
             waits_provider: parsed.6,
             needs_logger: parsed.7,
+            download_as_car: parsed.8
         }
     }
 }
@@ -162,17 +168,18 @@ impl From<PartyParsed> for Party {
 // obtained from a simple derive
 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 #[derive(Serialize, Deserialize)]
-pub struct DescartesCtxParsed(
+pub struct CartesiComputeCtxParsed(
     U256Array,    // finalTime, deadline, outputPosition, outputLog2Size
     AddressArray, // challenger, claimer
     Bytes32Array, // templateHash, initialHash, claimedFinalHash, currentState
     BytesField,   // claimedOutput
     DriveArray,
     PartyType,
+    BoolField
 );
 
 #[derive(Serialize, Debug)]
-pub struct DescartesCtx {
+pub struct CartesiComputeCtx {
     pub template_hash: H256,
     pub initial_hash: H256,
     pub claimed_final_hash: H256,
@@ -186,11 +193,12 @@ pub struct DescartesCtx {
     pub current_state: String,
     pub input_drives: Vec<Drive>,
     pub partyState: Party,
+    pub noChallengeDrive: bool,
 }
 
-impl From<DescartesCtxParsed> for DescartesCtx {
-    fn from(parsed: DescartesCtxParsed) -> DescartesCtx {
-        DescartesCtx {
+impl From<CartesiComputeCtxParsed> for CartesiComputeCtx {
+    fn from(parsed: CartesiComputeCtxParsed) -> CartesiComputeCtx {
+        CartesiComputeCtx {
             final_time: parsed.0.value[0],
             deadline: parsed.0.value[1],
             output_position: parsed.0.value[2],
@@ -213,12 +221,13 @@ impl From<DescartesCtxParsed> for DescartesCtx {
             claimed_output: parsed.3.value,
             input_drives: parsed.4.value.iter().map(|d| d.into()).collect(),
             partyState: parsed.5.value.into(),
+            noChallengeDrive: parsed.6.value.into()
         }
     }
 }
 
-impl DApp<()> for Descartes {
-    /// React to the descartes contract, submitting drives,
+impl DApp<()> for CartesiCompute {
+    /// React to the cartesi compute contract, submitting drives,
     /// submitting result, confirming or challenging result
     /// when appropriate
     fn react(
@@ -227,16 +236,19 @@ impl DApp<()> for Descartes {
         _post_payload: &Option<String>,
         _: &(),
     ) -> Result<Reaction> {
-        // get context (state) of the Descartes instance
-        let parsed: DescartesCtxParsed =
+        // get context (state) of the CartesiCompute instance
+        let parsed: CartesiComputeCtxParsed =
             serde_json::from_str(&instance.json_data).chain_err(|| {
                 format!(
-                    "Could not parse descartes instance json_data: {}",
+                    "Could not parse cartesi compute instance json_data: {}",
                     &instance.json_data
                 )
             })?;
-        let ctx: DescartesCtx = parsed.into();
-        trace!("Context for descartes (index {}) {:?}", instance.index, ctx);
+        let ctx: CartesiComputeCtx = parsed.into();
+        trace!("Context for cartesi compute (index {}) {:?}", instance.index, ctx);
+
+        let machine_id =
+            build_machine_id(instance.index, &instance.concern.user_address);
 
         // these states should not occur as they indicate an innactive instance,
         // but it is possible that the blockchain state changed between queries
@@ -246,6 +258,19 @@ impl DApp<()> for Descartes {
             | "ChallengerWon"
             | "ClaimerWon"
             | "ConsensusResult" => {
+                let request = EndSessionRequest {
+                    session_id: machine_id.clone(),
+                    silent: true,
+                };
+
+                // send terminateSession request to the emulator service
+                let _processed_response = archive.get_response(
+                    EMULATOR_SERVICE_NAME.to_string(),
+                    build_session_end_key(machine_id.clone()),
+                    EMULATOR_METHOD_END.to_string(),
+                    request.into(),
+                )?;
+
                 return Ok(Reaction::Idle);
             }
             _ => {}
@@ -286,6 +311,9 @@ impl DApp<()> for Descartes {
                             drive.log2_size.as_u64() as u32,
                             drive.root_hash,
                         ) {
+                            if ctx.noChallengeDrive {
+                                return Err(e);
+                            }
                             match e.kind() {
                                 ErrorKind::ResponseInvalidError(
                                     _service,
@@ -339,7 +367,7 @@ impl DApp<()> for Descartes {
                 let processed_response: SubmitFileResponse =
                     get_logger_response(
                         archive,
-                        "Descartes".into(),
+                        "CartesiCompute".into(),
                         build_logger_submit_key(root.clone()),
                         LOGGER_METHOD_SUBMIT.to_string(),
                         request.into(),
@@ -387,6 +415,8 @@ impl DApp<()> for Descartes {
                         ctx.final_time,
                         ctx.output_position,
                         ctx.output_log2_size,
+                        machine_id,
+                        ctx.noChallengeDrive,
                     );
                 }
                 "WaitingChallengeDrives" => {
@@ -403,6 +433,8 @@ impl DApp<()> for Descartes {
                             ctx.final_time,
                             ctx.output_position,
                             ctx.output_log2_size,
+                            machine_id,
+                            ctx.noChallengeDrive,
                         );
                     }
                     return Ok(Reaction::Idle);
@@ -427,9 +459,9 @@ impl DApp<()> for Descartes {
 
                     match vg_ctx.current_state.as_ref() {
                         "FinishedClaimerWon" => {
-                            // claim victory in descartes contract
+                            // claim victory in cartesi compute contract
                             info!(
-                                "Claiming victory for Descartes (index: {})",
+                                "Claiming victory for Cartesi Compute (index: {})",
                                 instance.index
                             );
                             let request = TransactionRequest {
@@ -451,10 +483,6 @@ impl DApp<()> for Descartes {
                         _ => {
                             // verification game is still active,
                             // pass control to the appropriate dapp
-                            let machine_id = build_machine_id(
-                                instance.index,
-                                &instance.concern.user_address,
-                            );
                             return VG::react(
                                 vg_instance,
                                 archive,
@@ -504,6 +532,8 @@ impl DApp<()> for Descartes {
                         ctx.final_time,
                         ctx.output_position,
                         ctx.output_log2_size,
+                        machine_id,
+                        ctx.noChallengeDrive,
                     );
                 }
                 _ => {
@@ -532,9 +562,9 @@ impl DApp<()> for Descartes {
 
                     match vg_ctx.current_state.as_ref() {
                         "FinishedChallengerWon" => {
-                            // claim victory in descartes contract
+                            // claim victory in cartesi compute contract
                             info!(
-                                "Claiming victory for Descartes (index: {})",
+                                "Claiming victory for Cartesi Compute (index: {})",
                                 instance.index
                             );
                             let request = TransactionRequest {
@@ -556,10 +586,6 @@ impl DApp<()> for Descartes {
                         _ => {
                             // verification game is still active,
                             // pass control to the appropriate dapp
-                            let machine_id = build_machine_id(
-                                instance.index,
-                                &instance.concern.user_address,
-                            );
                             return VG::react(
                                 vg_instance,
                                 archive,
@@ -581,15 +607,15 @@ impl DApp<()> for Descartes {
         archive: &Archive,
         _: &(),
     ) -> Result<state::Instance> {
-        // get context (state) of the descartes instance
-        let parsed: DescartesCtxParsed =
+        // get context (state) of the cartesi compute instance
+        let parsed: CartesiComputeCtxParsed =
             serde_json::from_str(&instance.json_data).chain_err(|| {
                 format!(
-                    "Could not parse descartes instance json_data: {}",
+                    "Could not parse cartesi compute instance json_data: {}",
                     &instance.json_data
                 )
             })?;
-        let ctx: DescartesCtx = parsed.into();
+        let ctx: CartesiComputeCtx = parsed.into();
         let json_data = serde_json::to_string(&ctx).unwrap();
 
         // get context (state) of the sub instances
@@ -605,10 +631,10 @@ impl DApp<()> for Descartes {
         }
 
         let pretty_instance = state::Instance {
-            name: "Descartes".to_string(),
+            name: "CartesiCompute".to_string(),
             concern: instance.concern.clone(),
             index: instance.index,
-            service_status: archive.get_service("Descartes".into()),
+            service_status: archive.get_service("CartesiCompute".into()),
             json_data: json_data,
             sub_instances: pretty_sub_instances,
         };
@@ -657,18 +683,18 @@ fn react_by_machine_output(
     final_time: U256,
     output_position: U256,
     output_log2_size: U256,
+    machine_id: String,
+    noChallengeDrive: bool,
 ) -> Result<Reaction> {
     // create machine and fill in all the drives
-    let id = build_machine_id(index, &concern.user_address);
-
     let mut machine = cartesi_machine::MachineRequest::new();
     machine.set_directory(format!(
-        "/opt/cartesi/srv/descartes/cartesi-machine/{:x}",
+        "/opt/cartesi/srv/compute/cartesi-machine/{:x}",
         template_hash
     ));
 
     let request = NewSessionRequest {
-        session_id: id.clone(),
+        session_id: machine_id.clone(),
         machine: machine,
         force: true,
     };
@@ -677,7 +703,7 @@ fn react_by_machine_output(
     let _processed_response: NewSessionResponse = archive
         .get_response(
             EMULATOR_SERVICE_NAME.to_string(),
-            id.clone(),
+            machine_id.clone(),
             EMULATOR_METHOD_NEW.to_string(),
             request.into(),
         )?
@@ -695,7 +721,7 @@ fn react_by_machine_output(
             // write direct values to drive
             let data = drive.direct_value.clone();
             let archive_key = build_session_write_key(
-                id.clone(),
+                machine_id.clone(),
                 time,
                 address,
                 data.to_vec(),
@@ -706,14 +732,14 @@ fn react_by_machine_output(
             position.set_data(data.to_vec());
 
             let request = SessionWriteMemoryRequest {
-                session_id: id.clone(),
+                session_id: machine_id.clone(),
                 time: time,
                 position: position,
             };
 
             let _processed_response = archive.get_response(
                 EMULATOR_SERVICE_NAME.to_string(),
-                archive_key.clone(),
+                archive_key,
                 EMULATOR_METHOD_WRITE.to_string(),
                 request.into(),
             )?;
@@ -727,6 +753,9 @@ fn react_by_machine_output(
                 // try to get drive from Ipfs first
                 Ok(output_path) => output_path,
                 Err(e) => {
+                    if noChallengeDrive {
+                        return Err(e);
+                    }
                     match e.kind() {
                         ErrorKind::ResponseInvalidError(_service, _key, _m) => {
                             // fall back to logger if drive not found in ipfs
@@ -740,7 +769,7 @@ fn react_by_machine_output(
                             let processed_response: DownloadFileResponse =
                                 get_logger_response(
                                     archive,
-                                    "Descartes".into(),
+                                    "CartesiCompute".into(),
                                     build_logger_download_key(
                                         drive.root_hash.clone(),
                                     ),
@@ -762,42 +791,48 @@ fn react_by_machine_output(
                 }
             };
 
-            // TODO: rewrite with flash replacement call later
-            let data = std::fs::read(drive_path)?;
-            let archive_key = build_session_write_key(
-                id.clone(),
+            let data_len = std::fs::metadata(drive_path.clone())?.len();
+            let archive_key = build_session_replace_key(
+                machine_id.clone(),
                 time,
                 address,
-                data.clone(),
+                drive_path.clone(),
             );
 
-            let mut position = cartesi_machine::WriteMemoryRequest::new();
-            position.set_address(address);
-            position.set_data(data);
+            let mut mrc = cartesi_machine::MemoryRangeConfig::new();
+            
+            mrc.set_start(address);
+            mrc.set_length(1 << (drive.log2_size.as_u64() as u32));
+            mrc.set_image_filename(drive_path.clone());
+            mrc.set_shared(false);
 
-            let request = SessionWriteMemoryRequest {
-                session_id: id.clone(),
+            let request = SessionReplaceMemoryRangeRequest {
+                session_id: machine_id.clone(),
                 time: time,
-                position: position,
+                range: mrc,
             };
 
             let _ = archive.get_response(
                 EMULATOR_SERVICE_NAME.to_string(),
-                archive_key.clone(),
-                EMULATOR_METHOD_WRITE.to_string(),
+                archive_key,
+                EMULATOR_METHOD_REPLACE.to_string(),
                 request.into(),
             )?;
         }
         if let Role::Claimer = role {
             // get input drive siblings
-            let archive_key =
-                build_session_proof_key(id.clone(), time, address, log2_size);
+            let archive_key = build_session_proof_key(
+                machine_id.clone(),
+                time,
+                address,
+                log2_size,
+            );
             let mut target = cartesi_machine::GetProofRequest::new();
             target.set_address(address);
             target.set_log2_size(log2_size);
 
             let request = SessionGetProofRequest {
-                session_id: id.clone(),
+                session_id: machine_id.clone(),
                 time: time,
                 target: target,
             };
@@ -805,7 +840,7 @@ fn react_by_machine_output(
             let processed_response: SessionGetProofResponse = archive
                 .get_response(
                     EMULATOR_SERVICE_NAME.to_string(),
-                    archive_key.clone(),
+                    archive_key,
                     EMULATOR_METHOD_PROOF.to_string(),
                     request.into(),
                 )?
@@ -833,14 +868,15 @@ fn react_by_machine_output(
     let sample_points: Vec<u64> = vec![0, time];
 
     let request = SessionRunRequest {
-        session_id: id.clone(),
+        session_id: machine_id.clone(),
         times: sample_points.clone(),
     };
-    let archive_key = build_session_run_key(id.clone(), sample_points.clone());
+    let archive_key =
+        build_session_run_key(machine_id.clone(), sample_points.clone());
 
     let processed_result: SessionRunResult = get_run_result(
         archive,
-        "Descartes".to_string(),
+        "CartesiCompute".to_string(),
         archive_key,
         request.into(),
     )?;
@@ -854,13 +890,13 @@ fn react_by_machine_output(
         let address = output_position.as_u64();
 
         let archive_key =
-            build_session_read_key(id.clone(), time, address, length);
+            build_session_read_key(machine_id.clone(), time, address, length);
         let mut position = cartesi_machine::ReadMemoryRequest::new();
         position.set_address(address);
         position.set_length(length);
 
         let request = SessionReadMemoryRequest {
-            session_id: id.clone(),
+            session_id: machine_id.clone(),
             time: time,
             position: position,
         };
@@ -868,7 +904,7 @@ fn react_by_machine_output(
         let processed_response: SessionReadMemoryResponse = archive
             .get_response(
                 EMULATOR_SERVICE_NAME.to_string(),
-                archive_key.clone(),
+                archive_key,
                 EMULATOR_METHOD_READ.to_string(),
                 request.into(),
             )?
@@ -881,14 +917,18 @@ fn react_by_machine_output(
 
         calculated_output = processed_response.read_content.data.clone();
 
-        let archive_key =
-            build_session_proof_key(id.clone(), time, address, log2_size);
+        let archive_key = build_session_proof_key(
+            machine_id.clone(),
+            time,
+            address,
+            log2_size,
+        );
         let mut target = cartesi_machine::GetProofRequest::new();
         target.set_address(address);
         target.set_log2_size(log2_size);
 
         let request = SessionGetProofRequest {
-            session_id: id.clone(),
+            session_id: machine_id.clone(),
             time: time,
             target: target,
         };
@@ -896,7 +936,7 @@ fn react_by_machine_output(
         let processed_response: SessionGetProofResponse = archive
             .get_response(
                 EMULATOR_SERVICE_NAME.to_string(),
-                archive_key.clone(),
+                archive_key,
                 EMULATOR_METHOD_PROOF.to_string(),
                 request.into(),
             )?
@@ -990,7 +1030,7 @@ fn get_ipfs_drive(
         ipfs_path,
         log2_size,
         output_path: format!(
-            "/opt/cartesi/srv/descartes/flashdrive/{:x}",
+            "/opt/cartesi/srv/compute/flashdrive/{:x}",
             root_hash
         ),
         // TODO: come up with better timeout
@@ -1014,7 +1054,7 @@ fn get_ipfs_drive(
                         key,
                         IPFS_METHOD_GET.into(),
                         request.into(),
-                        "Descartes".into(),
+                        "CartesiCompute".into(),
                         1,
                         p.progress,
                         "IPFS still getting".to_string(),
@@ -1022,6 +1062,7 @@ fn get_ipfs_drive(
                 }
                 GetFileResponseOneOf::GetResult(r) => {
                     if r.root_hash != root_hash {
+                        info!("Root hash mismatch");
                         Err(invalid_error)
                     } else {
                         Ok(r.output_path)

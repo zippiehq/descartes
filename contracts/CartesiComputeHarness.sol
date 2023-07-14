@@ -176,7 +176,7 @@
 
 //    END OF TERMS AND CONDITIONS
 
-//    Copyright (C) 2020 Cartesi Pte. Ltd.
+//    Copyright (C) 2023 Cartesi Pte. Ltd.
 
 //    Licensed under the Apache License, Version 2.0 (the "License");
 //    you may not use this file except in compliance with the License.
@@ -190,75 +190,25 @@
 //    See the License for the specific language governing permissions and
 //    limitations under the License.
 
-/// @title DescartesInterface
-/// @author Stephen Chen
-pragma solidity ^0.7.0;
-pragma experimental ABIEncoderV2;
+/// @title CartesiComputeHarness
 
-import "@cartesi/util/contracts/Instantiator.sol";
+pragma solidity ^0.8.0;
 
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
+import "./CartesiComputeInterface.sol";
 
-interface DescartesInterface is Instantiator {
+// This harness contract sits in between a dapp and the factual Cartesi Compute
+// deployment, to assist in pausing the ability to instantiate new
+// computations, in case of security issues being found by the Cartesi team
 
-    enum State {
-        WaitingProviders,
-        ProviderMissedDeadline,
-        WaitingChallengeDrives,
-        WaitingReveals,
-        WaitingClaim,
-        ClaimerMissedDeadline,
-        WaitingConfirmationDeadline, // "Voting Phase"
-        WaitingChallengeResult, // "Voting Phase"
-        ChallengerWon,
-        ClaimerWon,
-        ConsensusResult
+contract CartesiComputeHarness is Ownable, Pausable {
+    CartesiComputeInterface cc;
+
+    constructor(address _cartesiCompute) {
+        cc = CartesiComputeInterface(_cartesiCompute);
     }
 
-    /*
-    There are two types of drive, one is directDrive, and the other is loggerDrive.
-    directDrive has content inserted to the directValue field with up to 1MB;
-    loggerDrive has content submitted to the logger contract,
-    which can be retrieved with driveLog2Size and loggerRootHash.
-    The needsLogger field is set to true for loggerDrive, false for directDrive.
-
-    The waitsProvider field is set to true meaning the drive is not ready,
-    and needs to be filled during the WaitingProviders phase.
-    The provider field is the user who is responsible for filling out the drive.
-    I.e the directValue of directDrive, or the loggerRootHash of loggerDrive
-    */
-    struct Drive {
-        // start position of the drive
-        uint64 position;
-        // log2 size of the drive in the unit of bytes
-        uint8 driveLog2Size;
-        // direct value inserted to the drive
-        bytes directValue;
-        // ipfs object path of the logger drive
-        bytes loggerIpfsPath;
-        // root hash of the drive submitted to the logger
-        bytes32 loggerRootHash;
-        // the user who's responsible for filling out the drive
-        address provider;
-        // indicates the drive needs to wait for the provider to provide content
-        bool waitsProvider;
-        // indicates the content of the drive must be retrieved from logger
-        bool needsLogger;
-    }
-
-    struct Party {
-        bool isParty;
-        bool hasVoted;
-        bool hasCheated;
-        uint64 arrayIdx;
-    }
-
-    /// @notice Instantiate a Descartes SDK instance.
-    /// @param _finalTime max cycle of the machine for that computation
-    /// @param _templateHash hash of the machine with all drives empty
-    /// @param _outputPosition position of the output drive
-    /// @param _roundDuration duration of the round (security param)
-    /// @param _inputDrives an array of drive which assemble the machine
-    /// @return uint256, Descartes index
     function instantiate(
         uint256 _finalTime,
         bytes32 _templateHash,
@@ -266,21 +216,26 @@ interface DescartesInterface is Instantiator {
         uint8 _outputLog2Size,
         uint256 _roundDuration,
         address[] memory parties,
-        Drive[] memory _inputDrives) external returns (uint256);
+        CartesiComputeInterface.Drive[] memory _inputDrives,
+        bool _noChallengeDrive
+    ) public whenNotPaused returns (uint256) {
+        cc.instantiate(
+            _finalTime,
+            _templateHash,
+            _outputPosition,
+            _outputLog2Size,
+            _roundDuration,
+            parties,
+            _inputDrives,
+            _noChallengeDrive
+        );
+    }
 
-    /// @notice Get result of a finished instance.
-    /// @param _index index of Descartes instance to get result
-    /// @return bool, indicates the result is ready
-    /// @return bool, indicates the sdk is still running
-    /// @return address, the user to blame for the abnormal stop of the sdk
-    /// @return bytes32, the result of the sdk if available
-    function getResult(uint256 _index) external view returns (
-        bool,
-        bool,
-        address,
-        bytes memory);
+    function pause() public onlyOwner {
+        _pause();
+    }
 
-    /// @notice Deactivate a Descartes SDK instance.
-    /// @param _index index of Descartes instance to deactivate
-    function destruct(uint256 _index) external;
+    function unpause() public onlyOwner {
+        _unpause();
+    }
 }

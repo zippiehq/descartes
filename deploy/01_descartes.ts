@@ -6,19 +6,20 @@ const func: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
     const { deploy, get } = deployments;
     const { deployer } = await getNamedAccounts();
 
-    const Merkle = await get("Merkle");
+    const MerkleV3 = await get("MerkleV3");
     const Logger = await get("Logger");
     const VGInstantiator = await get("VGInstantiator");
     const Step = await get("Step");
-    await deploy("Descartes", {
+
+    await deploy("CartesiCompute", {
         from: deployer,
         log: true,
         libraries: {
-            Merkle: Merkle.address,
+            MerkleV3: MerkleV3.address,
         },
         args: [Logger.address, VGInstantiator.address, Step.address],
     });
 };
 
 export default func;
-export const tags = ["Descartes"];
+export const tags = ["CartesiCompute"];
