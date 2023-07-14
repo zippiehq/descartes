@@ -192,23 +192,23 @@
 
 /// @title CartesiCompute
 /// @author Stephen Chen
-pragma solidity ^0.7.0;
+pragma solidity ^0.8.0;
 pragma experimental ABIEncoderV2;
 
 // #if BUILD_TEST
 import "./test/TestMerkle.sol";
 // #else
-import "@cartesi/util/contracts/Merkle.sol";
+import "@cartesi/util/contracts/MerkleV3.sol";
 // #endif
-import "@cartesi/util/contracts/Decorated.sol";
-import "@cartesi/util/contracts/InstantiatorImpl.sol";
+import "@cartesi/util/contracts/DecoratedV2.sol";
+import "@cartesi/util/contracts/InstantiatorImplV2.sol";
 import "@cartesi/logger/contracts/LoggerInterface.sol";
 import "@cartesi/arbitration/contracts/VGInterface.sol";
 import "./CartesiComputeInterface.sol";
 
 contract CartesiCompute is
-    InstantiatorImpl,
-    Decorated,
+    InstantiatorImplV2,
+    DecoratedV2,
     CartesiComputeInterface
 {
     address machine; // machine which will run the challenge
@@ -377,7 +377,7 @@ contract CartesiCompute is
                     bytes32[] memory data = getWordHashesFromBytes(
                         paddedDirectValue
                     );
-                    i.driveHash[j] = Merkle.calculateRootFromPowerOfTwo(data);
+                    i.driveHash[j] = MerkleV3.calculateRootFromPowerOfTwo(data);
                 } else {
                     // direct drive provided in later ProviderPhase
                     needsProviderPhase = true;
@@ -569,10 +569,10 @@ contract CartesiCompute is
 
         bytes32[] memory data = getWordHashesFromBytes(_output);
         require(
-            Merkle.getRootWithDrive(
+            MerkleV3.getRootWithDrive(
                 i.outputPosition,
                 i.outputLog2Size,
-                Merkle.calculateRootFromPowerOfTwo(data),
+                MerkleV3.calculateRootFromPowerOfTwo(data),
                 _outputSiblings
             ) == _claimedFinalHash,
             "Output not in final hash"
@@ -582,17 +582,17 @@ contract CartesiCompute is
         for (uint256 j = 0; j < drivesLength; j++) {
             bytes32[] memory driveSiblings = _drivesSiblings[j];
             require(
-                Merkle.getRootWithDrive(
+                MerkleV3.getRootWithDrive(
                     i.inputDrives[j].position,
                     i.inputDrives[j].driveLog2Size,
-                    Merkle.getPristineHash(
+                    MerkleV3.getPristineHash(
                         uint8(i.inputDrives[j].driveLog2Size)
                     ),
                     driveSiblings
                 ) == i.initialHash,
                 "Drive siblings must be compatible with previous initial hash for empty drive"
             );
-            i.initialHash = Merkle.getRootWithDrive(
+            i.initialHash = MerkleV3.getRootWithDrive(
                 i.inputDrives[j].position,
                 i.inputDrives[j].driveLog2Size,
                 i.driveHash[j],
@@ -818,7 +818,7 @@ contract CartesiCompute is
         }
 
         bytes32[] memory data = getWordHashesFromBytes(paddedDirectValue);
-        bytes32 driveHash = Merkle.calculateRootFromPowerOfTwo(data);
+        bytes32 driveHash = MerkleV3.calculateRootFromPowerOfTwo(data);
 
         drive.directValue = _value;
         i.driveHash[driveIndex] = driveHash;

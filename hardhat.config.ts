@@ -7,6 +7,8 @@ import "hardhat-deploy";
 import "hardhat-deploy-ethers";
 
 import "@nomiclabs/hardhat-solpp";
+
+import "hardhat-contract-sizer";
 // import "solidity-coverage"; @dev WIP this plugin is not updated to hardhat yet
 
 // This is a sample hardhat task. To learn how to create your own go to
@@ -36,7 +38,10 @@ const infuraNetwork = (
 
 const config: HardhatUserConfig = {
     networks: {
-        hardhat: mnemonic ? { accounts: { mnemonic } } : {},
+        hardhat: {
+            accounts: mnemonic ? { mnemonic } : undefined,
+            allowUnlimitedContractSize: true,
+        },
         localhost: {
             url: "http://localhost:8545",
             accounts: mnemonic ? { mnemonic } : undefined,
@@ -66,13 +71,24 @@ const config: HardhatUserConfig = {
         },
     },
     solidity: {
-        version: "0.7.4",
-        settings: {
-            optimizer: {
-                runs: 110,
-                enabled: true,
+        compilers: [
+            {
+                version: "0.7.4",
+                settings: {
+                    optimizer: {
+                        enabled: true,
+                    },
+                },
             },
-        },
+            {
+                version: "0.8.15",
+                settings: {
+                    optimizer: {
+                        enabled: true,
+                    },
+                },
+            },
+        ],
     },
     paths: {
         artifacts: "artifacts",
