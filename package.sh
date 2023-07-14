@@ -2,8 +2,9 @@
 
 # Run yarn commands
 yarn 
-yarn postinstall
-yarn prepare
+yarn clean
+yarn build
+yarn copy-dts
 
 # Destination folder
 DEST="../../compute"

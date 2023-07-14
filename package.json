@@ -5,9 +5,8 @@
     "scripts": {
         "build": "hardhat compile && tsc",
         "copy-dts": "copyfiles -u 1 \"src/**/*.d.ts\" dist/src",
-        "export": "hardhat export-artifacts export/artifacts",
         "info": "npm-scripts-info",
-        "prepare": "run-s clean build copy-dts export",
+        "prepare": "run-s clean build copy-dts",
         "test": "hardhat test --deploy-fixture ./test/*.ts",
         "test:integration": "./test/integration/run.sh",
         "clean": "rimraf artifacts && rimraf cache && rimraf deployments/localhost && rimraf deployments/coverage && rimraf src/types/* && rimraf dist",
@@ -25,7 +24,6 @@
     "scripts-info": {
         "build": "Build contracts and typescript code",
         "copy-dts": "Copy TypeChain type definition files to typescript output dir",
-        "export": "Export artifacts in a simpler format",
         "info": "Displays information about the scripts.",
         "test": "Run unit tests",
         "clean": "Clean build artifacts, including contracts local deployment information",

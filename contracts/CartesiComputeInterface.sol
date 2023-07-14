@@ -193,7 +193,6 @@
 /// @title CartesiComputeInterface
 /// @author Stephen Chen
 pragma solidity ^0.8.0;
-pragma experimental ABIEncoderV2;
 
 import "@cartesi/util/contracts/InstantiatorV2.sol";
 
@@ -276,15 +275,9 @@ interface CartesiComputeInterface is InstantiatorV2 {
     /// @return bool, indicates the sdk is still running
     /// @return address, the user to blame for the abnormal stop of the sdk
     /// @return bytes32, the result of the sdk if available
-    function getResult(uint256 _index)
-        external
-        view
-        returns (
-            bool,
-            bool,
-            address,
-            bytes memory
-        );
+    function getResult(
+        uint256 _index
+    ) external view returns (bool, bool, address, bytes memory);
 
     /// @notice Deactivate a Cartesi Compute SDK instance.
     /// @param _index index of Cartesi Compute instance to deactivate

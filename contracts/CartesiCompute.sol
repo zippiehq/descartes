@@ -193,7 +193,6 @@
 /// @title CartesiCompute
 /// @author Stephen Chen
 pragma solidity ^0.8.0;
-pragma experimental ABIEncoderV2;
 
 // #if BUILD_TEST
 import "./test/TestMerkle.sol";
@@ -358,17 +357,17 @@ contract CartesiCompute is
                 if (!drive.waitsProvider) {
                     // direct drive provided at instantiation
                     require(
-                        drive.directValue.length <= 2**drive.driveLog2Size,
+                        drive.directValue.length <= 2 ** drive.driveLog2Size,
                         "Input bytes length exceeds claimed log2 size"
                     );
 
                     // pad zero to the directValue if it's not exact power of 2
                     bytes memory paddedDirectValue = drive.directValue;
-                    if (drive.directValue.length < 2**drive.driveLog2Size) {
+                    if (drive.directValue.length < 2 ** drive.driveLog2Size) {
                         paddedDirectValue = abi.encodePacked(
                             drive.directValue,
                             new bytes(
-                                2**drive.driveLog2Size -
+                                2 ** drive.driveLog2Size -
                                     drive.directValue.length
                             )
                         );
@@ -449,7 +448,9 @@ contract CartesiCompute is
 
     /// @notice Challenger disputes the claim, starting a verification game.
     /// @param _index index of Cartesi Compute instance which challenger is starting the VG.
-    function challenge(uint256 _index)
+    function challenge(
+        uint256 _index
+    )
         public
         onlyActive(_index)
         onlyByParty(_index)
@@ -483,7 +484,9 @@ contract CartesiCompute is
 
     /// @notice Party confirms the claim
     /// @param _index index of Cartesi Compute instance which claimer being confirmed
-    function confirm(uint256 _index)
+    function confirm(
+        uint256 _index
+    )
         public
         onlyActive(_index)
         onlyByParty(_index)
@@ -514,11 +517,9 @@ contract CartesiCompute is
 
     /// @notice User requesting content of all drives to be revealed.
     /// @param _index index of Cartesi Compute instance which is requested for the drives
-    function challengeDrives(uint256 _index)
-        public
-        onlyActive(_index)
-        increasesNonce(_index)
-    {
+    function challengeDrives(
+        uint256 _index
+    ) public onlyActive(_index) increasesNonce(_index) {
         CartesiComputeCtx storage i = instance[_index];
         require(!i.noChallengeDrive, "Ctx marked as no challenge drive");
         require(
@@ -563,7 +564,7 @@ contract CartesiCompute is
             "Claimed drive number should match claimed siblings number"
         );
         require(
-            _output.length == 2**i.outputLog2Size,
+            _output.length == 2 ** i.outputLog2Size,
             "Output length doesn't match output log2 size"
         );
 
@@ -610,26 +611,22 @@ contract CartesiCompute is
     }
 
     /// @notice Is the given user concern about this instance.
-    function isConcerned(uint256 _index, address _user)
-        public
-        view
-        override
-        onlyInstantiated(_index)
-        returns (bool)
-    {
+    function isConcerned(
+        uint256 _index,
+        address _user
+    ) public view override onlyInstantiated(_index) returns (bool) {
         CartesiComputeCtx storage i = instance[_index];
         return i.parties[_user].isParty;
     }
 
-    function getPartyState(uint256 _index, address _p)
+    function getPartyState(
+        uint256 _index,
+        address _p
+    )
         public
         view
         onlyInstantiated(_index)
-        returns (
-            bool isParty,
-            bool hasVoted,
-            bool hasCheated
-        )
+        returns (bool isParty, bool hasVoted, bool hasCheated)
     {
         Party storage party = instance[_index].parties[_p];
         isParty = party.isParty;
@@ -638,7 +635,10 @@ contract CartesiCompute is
     }
 
     /// @notice Get state of the instance concerning given user.
-    function getState(uint256 _index, address _user)
+    function getState(
+        uint256 _index,
+        address _user
+    )
         public
         view
         onlyInstantiated(_index)
@@ -708,7 +708,7 @@ contract CartesiCompute is
                 i.claimedOutput,
                 drives,
                 user,
-		i.noChallengeDrive
+                i.noChallengeDrive
             );
         } else {
             return (
@@ -718,17 +718,14 @@ contract CartesiCompute is
                 i.claimedOutput,
                 i.inputDrives,
                 user,
-		i.noChallengeDrive
+                i.noChallengeDrive
             );
         }
     }
 
-    function getCurrentState(uint256 _index)
-        public
-        view
-        onlyInstantiated(_index)
-        returns (bytes32)
-    {
+    function getCurrentState(
+        uint256 _index
+    ) public view onlyInstantiated(_index) returns (bytes32) {
         State currentState = instance[_index].currentState;
         if (currentState == State.WaitingProviders) {
             return "WaitingProviders";
@@ -768,7 +765,10 @@ contract CartesiCompute is
     }
 
     /// @notice Get sub-instances of the instance.
-    function getSubInstances(uint256 _index, address)
+    function getSubInstances(
+        uint256 _index,
+        address
+    )
         public
         view
         override
@@ -793,27 +793,26 @@ contract CartesiCompute is
     /// @notice Provide the content of a direct drive (only drive provider can call it).
     /// @param _index index of Cartesi Compute instance the drive belongs to.
     /// @param _value bytes value of the direct drive
-    function provideDirectDrive(uint256 _index, bytes memory _value)
-        public
-        onlyActive(_index)
-        requirementsForProviderDrive(_index)
-    {
+    function provideDirectDrive(
+        uint256 _index,
+        bytes memory _value
+    ) public onlyActive(_index) requirementsForProviderDrive(_index) {
         CartesiComputeCtx storage i = instance[_index];
         uint256 driveIndex = i.providerDrives[i.providerDrivesPointer];
         Drive storage drive = i.inputDrives[driveIndex];
 
         require(!drive.needsLogger, "Invalid drive to claim for direct value");
         require(
-            _value.length <= 2**drive.driveLog2Size,
+            _value.length <= 2 ** drive.driveLog2Size,
             "Input bytes length exceeds claimed log2 size"
         );
 
         // pad zero to the directValue if it's not exact power of 2
         bytes memory paddedDirectValue = _value;
-        if (_value.length < 2**drive.driveLog2Size) {
+        if (_value.length < 2 ** drive.driveLog2Size) {
             paddedDirectValue = abi.encodePacked(
                 _value,
-                new bytes(2**drive.driveLog2Size - _value.length)
+                new bytes(2 ** drive.driveLog2Size - _value.length)
             );
         }
 
@@ -839,11 +838,10 @@ contract CartesiCompute is
     /// @notice Provide the root hash of a logger drive (only drive provider can call it).
     /// @param _index index of CartesiCompute instance the drive belongs to
     /// @param _root root hash of the logger drive
-    function provideLoggerDrive(uint256 _index, bytes32 _root)
-        public
-        onlyActive(_index)
-        requirementsForProviderDrive(_index)
-    {
+    function provideLoggerDrive(
+        uint256 _index,
+        bytes32 _root
+    ) public onlyActive(_index) requirementsForProviderDrive(_index) {
         CartesiComputeCtx storage i = instance[_index];
         uint256 driveIndex = i.providerDrives[i.providerDrivesPointer];
         Drive storage drive = i.inputDrives[driveIndex];
@@ -898,11 +896,9 @@ contract CartesiCompute is
     ///         then he or she can call this function to claim victory in
     ///         this contract as well.
     /// @param _index index of Cartesi Compute instance to win
-    function winByVG(uint256 _index)
-        public
-        onlyActive(_index)
-        increasesNonce(_index)
-    {
+    function winByVG(
+        uint256 _index
+    ) public onlyActive(_index) increasesNonce(_index) {
         CartesiComputeCtx storage i = instance[_index];
         require(
             i.currentState == State.WaitingChallengeResult,
@@ -949,12 +945,9 @@ contract CartesiCompute is
 
     /// @notice Deactivate a Cartesi Compute SDK instance.
     /// @param _index index of Cartesi Compute instance to deactivate
-    function destruct(uint256 _index)
-        public
-        override
-        onlyActive(_index)
-        onlyBy(instance[_index].owner)
-    {
+    function destruct(
+        uint256 _index
+    ) public override onlyActive(_index) onlyBy(instance[_index].owner) {
         CartesiComputeCtx storage i = instance[_index];
         require(
             i.currentState == State.ProviderMissedDeadline ||
@@ -1011,17 +1004,14 @@ contract CartesiCompute is
     /// @return bool, indicates the sdk is still running
     /// @return address, the user to blame for the abnormal stop of the sdk
     /// @return bytes, the result of the sdk if available
-    function getResult(uint256 _index)
+    function getResult(
+        uint256 _index
+    )
         public
         view
         override
         onlyInstantiated(_index)
-        returns (
-            bool,
-            bool,
-            address,
-            bytes memory
-        )
+        returns (bool, bool, address, bytes memory)
     {
         CartesiComputeCtx storage i = instance[_index];
         if (i.currentState == State.ConsensusResult) {
@@ -1072,11 +1062,9 @@ contract CartesiCompute is
     }
 
     /// @notice Convert bytes32 into bytes8[] and calculate the hashes of them
-    function getWordHashesFromBytes32(bytes32 _value)
-        private
-        pure
-        returns (bytes32[] memory)
-    {
+    function getWordHashesFromBytes32(
+        bytes32 _value
+    ) private pure returns (bytes32[] memory) {
         bytes32[] memory data = new bytes32[](4);
         for (uint256 i = 0; i < 4; i++) {
             bytes8 dataBytes8 = bytes8(
@@ -1089,11 +1077,9 @@ contract CartesiCompute is
     }
 
     /// @notice Convert bytes into bytes8[] and calculate the hashes of them
-    function getWordHashesFromBytes(bytes memory _value)
-        private
-        pure
-        returns (bytes32[] memory)
-    {
+    function getWordHashesFromBytes(
+        bytes memory _value
+    ) private pure returns (bytes32[] memory) {
         uint256 hashesLength = _value.length / 8;
         bytes32[] memory data = new bytes32[](hashesLength);
         for (uint256 i = 0; i < hashesLength; i++) {
@@ -1109,11 +1095,9 @@ contract CartesiCompute is
     }
 
     /// @notice Get the worst case scenario duration for a specific state
-    function getMaxStateDuration(uint256 _index)
-        private
-        view
-        returns (uint256)
-    {
+    function getMaxStateDuration(
+        uint256 _index
+    ) private view returns (uint256) {
         // TODO: make sure maxDuration calculations are reasonable
         uint256 partitionSize = 1;
         uint256 picoSecondsToRunInsn = 500; // 500 pico seconds to run a instruction
@@ -1207,10 +1191,7 @@ contract CartesiCompute is
     /// @notice checks whether or not it's a party to this instance
     modifier onlyByParty(uint256 _index) {
         CartesiComputeCtx storage i = instance[_index];
-        require(
-            i.parties[msg.sender].isParty,
-            "Sender must be a party"
-        );
+        require(i.parties[msg.sender].isParty, "Sender must be a party");
         _;
     }
 
@@ -1226,10 +1207,7 @@ contract CartesiCompute is
     /// @notice checks whether or not a party has already voted
     modifier onlyNoVotes(uint256 _index) {
         CartesiComputeCtx storage i = instance[_index];
-        require(
-            !i.parties[msg.sender].hasVoted,
-            "Sender has already voted"
-        );
+        require(!i.parties[msg.sender].hasVoted, "Sender has already voted");
         _;
     }
 }
